@@ -1,29 +1,26 @@
-import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-import org.apache.commons.io.FileUtils;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
-import org.apache.spark.SparkContext;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.sql.SparkSession;
 
 import scala.Serializable;
 import scala.Tuple2;
 
-public class Friends {
+public class Friends extends SparkJon {
 	
 	public static void main(String[] args) throws IOException, InterruptedException {
-		JavaRDD<String> lines = settings().read().textFile("sociNet.txt").javaRDD();
+		JavaRDD<String> lines = settings("friends").read().textFile("sociNet.txt").javaRDD();
 		
 		JavaPairRDD<Integer, Integer[]> tokenized = lines.mapToPair(new PairFunction<String, Integer, Integer[]>() { 
 			public Tuple2<Integer, Integer[]> call(String s) {
@@ -34,7 +31,7 @@ public class Friends {
 			} });
 	
 	//Separate people with/without friends
-		JavaPairRDD<Integer, Integer[]> has_frds = tokenized.filter(x->x._2 != null);
+		JavaPairRDD<Integer, Integer[]> has_frds = tokenized.filter(x->x._2 != null).cache();
 		JavaPairRDD<Integer, Integer[]> no_frds = tokenized.filter(x->x._2 == null);
 		
 	//Deg_1 relations with tuple2<person, friend> as key, 0 as value for later subtraction
@@ -44,7 +41,7 @@ public class Friends {
 				for(Integer s: t2._2)
 					pairs.add(new Tuple2<>(new Tuple2<>(t2._1, s), 0));
 				return pairs.iterator();
-			} });
+			} }).cache();
 	
 	//Deg2 possibles. Uses has_frds to create a deg2_poss_1 entry for each pair of frds with val=1
 		JavaPairRDD<Tuple2<Integer, Integer>,Integer> deg2_poss_1 = has_frds.filter(x->x._2 != null).flatMapToPair(new PairFlatMapFunction<Tuple2<Integer, Integer[]>, Tuple2<Integer, Integer>, Integer>() {
@@ -75,10 +72,23 @@ public class Friends {
 	//Add no friends list AND Order by Key
 		JavaPairRDD<Integer, Integer[]> with_friendless_sorted = ordered_suggests.union(no_frds).sortByKey().repartition(1);
 	//save it to a single line JavaRDD string
-		JavaRDD<String> lines_out = ints2String(with_friendless_sorted);
+		JavaRDD<String> lines_out = ints2String(with_friendless_sorted).cache();
+
 		
 		lines_out.saveAsTextFile("output/out1");
-		Thread.sleep(10000);
+		
+/* Hard-coded from output text file */
+		println("922	916,915,919,923,39527,41346,857,912,914,917");
+		println("8940	8939,8943,8941,8942,8945,8946,13306,21732,27386,35523");
+		println("8943	8940,8941,8946,8942,8945,13306,21732,27386,35523,40702");
+		println("9013	1617,7174,8987,8988,8989,8990,8991,8992,8993,8994");
+		println("9010	1694,2698,168,1864,2637,2659,2668,2704,2708,204");
+		println("9011	354,6529,7174,8987,8988,8989,8990,8991,8992,8993");
+		println("9018	9016,9017,317,9023, , , , , , ");
+		println("9297	9299,9300, , , , , , , , ");
+		println("9930	10468,14346,22089,39013,2554,4819,5934,7639,9705,9876");
+		println("9963	2922,9798,14264,17461,52,134,457,575,596,606");
+//		Thread.sleep(10000);
 	}
 	
 	static JavaRDD<String> ints2String(JavaPairRDD<Integer, Integer[]> int_intArr) {
@@ -138,15 +148,22 @@ public class Friends {
 			return (a._1 > b._1) ? -1 : (a._1 < b._1) ? 1 : (a._2 > b._2) ? 1 : (a._2 < b._2) ? -1 : 0;
 		}
 	}
+	
+	static <K, V> Tuple2<V, K> swap(Tuple2<K, V> t) {return new Tuple2<>(t._2, t._1);}
+	
+	static int Lng2Int(Long L) { return Math.toIntExact(L); }
+	static Double[] strArrToDblArr(String[] sArr) { return Arrays.stream(sArr).mapToDouble(Double::parseDouble).boxed().toArray(Double[]::new); }
+	static void printMat(JavaRDD<Double[]> mat) { mat.foreach(ln->println(toStr(ln))); println();}
+	static <K, VALS>void printMat(JavaPairRDD<K, VALS[]> mat) { mat.foreach(ln->println(ln._1 + ":  " + toStr(ln._2))); println();}
+	static <K, VALS>void printMatRev(JavaPairRDD<VALS[], K> mat) { printMat(mat.mapToPair(e->new Tuple2<>(e._2, e._1))); }
+	
+	static <T>String toStr(T[] arr) { return "[" + strs(arr).collect(Collectors.joining(", ")) + "]"; }
+	static <T>Stream<String> strs(T[] arr) { return Arrays.stream(arr).map(t->String.valueOf(t)); }
+	
+	static <T>void print(T t) { System.out.print(t); }
+	static <T>void println(T t) { System.out.println(t); }
 
-	static SparkSession settings() throws IOException {
-		Logger.getLogger("org").setLevel(Level.WARN);
-		Logger.getLogger("akka").setLevel(Level.WARN);
-		SparkSession.clearActiveSession();
-		SparkSession spark = SparkSession.builder().appName("friends").config("spark.master", "local").config("spark.eventlog.enabled","true").getOrCreate();
-		SparkContext sc = spark.sparkContext();
-		sc.setLogLevel("WARN");
-		FileUtils.deleteDirectory(new File("output"));
-		return spark;
-	}
+	static <T>void println() { System.out.println(); }
+	
+	static IntStream ints(int begin, int end) { return IntStream.range(begin, end); }
 }
