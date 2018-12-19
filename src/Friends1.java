@@ -17,10 +17,9 @@ import org.apache.spark.api.java.function.PairFunction;
 import scala.Serializable;
 import scala.Tuple2;
 
-public class Friends extends SparkJon {
-	
+public class Friends1 extends SparkJon {
 	public static void main(String[] args) throws IOException, InterruptedException {
-		JavaRDD<String> lines = settings("friends").read().textFile("sociNet.txt").javaRDD();
+		JavaRDD<String> lines = read("sociNet.txt", "friends1");
 		
 		JavaPairRDD<Integer, Integer[]> tokenized = lines.mapToPair(new PairFunction<String, Integer, Integer[]>() { 
 			public Tuple2<Integer, Integer[]> call(String s) {
@@ -73,45 +72,11 @@ public class Friends extends SparkJon {
 		JavaPairRDD<Integer, Integer[]> with_friendless_sorted = ordered_suggests.union(no_frds).sortByKey().repartition(1);
 	//save it to a single line JavaRDD string
 		JavaRDD<String> lines_out = ints2String(with_friendless_sorted).cache();
-
 		
 		lines_out.saveAsTextFile("output/out1");
-		
-/* Hard-coded from output text file */
-		println("922	916,915,919,923,39527,41346,857,912,914,917");
-		println("8940	8939,8943,8941,8942,8945,8946,13306,21732,27386,35523");
-		println("8943	8940,8941,8946,8942,8945,13306,21732,27386,35523,40702");
-		println("9013	1617,7174,8987,8988,8989,8990,8991,8992,8993,8994");
-		println("9010	1694,2698,168,1864,2637,2659,2668,2704,2708,204");
-		println("9011	354,6529,7174,8987,8988,8989,8990,8991,8992,8993");
-		println("9018	9016,9017,317,9023, , , , , , ");
-		println("9297	9299,9300, , , , , , , , ");
-		println("9930	10468,14346,22089,39013,2554,4819,5934,7639,9705,9876");
-		println("9963	2922,9798,14264,17461,52,134,457,575,596,606");
-//		Thread.sleep(10000);
+		Thread.sleep(60000);
 	}
-	
-	static JavaRDD<String> ints2String(JavaPairRDD<Integer, Integer[]> int_intArr) {
-		return int_intArr.map(new Function<Tuple2<Integer, Integer[]>, String>() {
-			public String call(Tuple2<Integer, Integer[]> t) throws Exception {
-				int i = 0;
-				String s = t._1 + "\t";
-				if(t._2 != null) {
-					if(t._2.length >=1) {
-						s += String.valueOf(t._2[i]);
-						i++;
-					}
-					while(i < 10) {
-						s+= (i < t._2.length) ? ("," + t._2[i]) : ", ";
-						i++;
-					}
-				}
-				else
-					s += " , , , , , , , , , ";
-				return s;
-			}
-		}); }
-	
+
 	static JavaPairRDD<Integer, Integer[]> iter2Array(JavaPairRDD<Integer, Iterable<Tuple2<Integer, Integer>>> int_TupItt_rdd) {
 		JavaPairRDD<Integer, Integer[]> int_intArr = int_TupItt_rdd.mapToPair(new PairFunction<Tuple2<Integer, Iterable<Tuple2<Integer, Integer>>>, Integer, Integer[]>() { 
 			public Tuple2<Integer, Integer[]> call(Tuple2<Integer,Iterable<Tuple2<Integer,Integer>>> int_TupItt) {
@@ -148,6 +113,27 @@ public class Friends extends SparkJon {
 			return (a._1 > b._1) ? -1 : (a._1 < b._1) ? 1 : (a._2 > b._2) ? 1 : (a._2 < b._2) ? -1 : 0;
 		}
 	}
+	
+	static JavaRDD<String> ints2String(JavaPairRDD<Integer, Integer[]> int_intArr) {
+		return int_intArr.map(new Function<Tuple2<Integer, Integer[]>, String>() {
+			public String call(Tuple2<Integer, Integer[]> t) throws Exception {
+				int i = 0;
+				String s = t._1 + "\t";
+				if(t._2 != null) {
+					if(t._2.length >=1) {
+						s += String.valueOf(t._2[i]);
+						i++;
+					}
+					while(i < 10) {
+						s+= (i < t._2.length) ? ("," + t._2[i]) : ", ";
+						i++;
+					}
+				}
+				else
+					s += " , , , , , , , , , ";
+				return s;
+			}
+		}); }
 	
 	static <K, V> Tuple2<V, K> swap(Tuple2<K, V> t) {return new Tuple2<>(t._2, t._1);}
 	
